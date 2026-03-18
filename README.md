@@ -1,6 +1,6 @@
 # persistent-counter-app
 
-Aplicación web de contador global con persistencia en base de datos construida con **Next.js 15** y **Server Actions**. El contador se incrementa o decrementa de forma atómica y se resetea automáticamente a cero tras 20 minutos de inactividad, sin necesidad de procesos en segundo plano ni cron jobs. El estado persiste en **Supabase (PostgreSQL)** mediante **Prisma 7**.
+Aplicación web de contador global con persistencia en base de datos construida con **Next.js 15** y **Server Actions**. El contador se incrementa o decrementa de forma atómica y se resetea automáticamente a cero tras 20 minutos de inactividad (en la siguiente lectura o escritura), sin necesidad de procesos en segundo plano ni cron jobs. El estado persiste en **Supabase (PostgreSQL)** mediante **Prisma 7**.
 
 Puedes visitar la app disponible en Vercel en: [https://persistent-counter-app.vercel.app/](https://persistent-counter-app.vercel.app/).
 
@@ -155,8 +155,46 @@ El reset a cero tras 20 minutos de inactividad no requiere cron jobs ni workers.
 ### Supabase como base de datos
 Supabase ofrece integración nativa con Prisma mediante cadenas de conexión estándar de PostgreSQL y dispone de un tier gratuito suficiente para el scope del proyecto.
 
+### Flujo de datos
+
+```mermaid
+flowchart TD
+    A[Usuario accede a la pagina] --> B[page.tsx - Server Component - force-dynamic]
+    B --> C[CounterCard - Server Component - llama a getCounter]
+    C --> D{shouldReset - updated_at supera 20 minutos?}
+    D -- Si --> E[prisma.counter.update con value 0 - retorna value=0]
+    D -- No --> F[Retorna value actual y updatedAt]
+    E --> G[getResetStatus calcula hora absoluta del proximo reset]
+    F --> G
+    G --> H[Renderiza CounterControls con initialValue]
+    H --> I[useOptimistic inicializado con initialValue]
+    I --> J[Usuario hace clic en + o -]
+    J --> K[setOptimisticValue actualiza UI de forma inmediata]
+    K --> L[Server Action invocada dentro de startTransition]
+    L --> M[SELECT key, value, updated_at FROM counter WHERE key = global FOR UPDATE]
+    M --> N{shouldReset - updated_at supera 20 minutos?}
+    N -- Si --> O[baseValue = 0]
+    N -- No --> P[baseValue = value actual]
+    O --> Q[Escribe baseValue +/- 1 con updated_at actualizado]
+    P --> Q
+    Q --> R[revalidatePath llamado para invalidar cache de la ruta]
+    R --> S[Server Component se re-ejecuta con datos frescos]
+    S --> H
+    L --> T{Server Action fallo?}
+    T -- Si --> U[React revierte optimisticValue a initialValue automaticamente]
+    T -- Si --> V[toast.error muestra el mensaje de error via Sonner]
+```
 ---
 
+## Limitaciones conocidas
+
+### Indicador de reset no es tiempo real en el cliente
+`getResetStatus(updatedAt)` en `CounterCard` calcula la hora absoluta del próximo reset en el servidor, en el momento del render. Este valor es estático: no cuenta regresivamente en tiempo real. Para tiempo real se requeriría un Client Component con `setInterval` que recibiera `updatedAt` como prop serializable.
+
+### El reset automático es reactivo, no proactivo
+El reset a cero se activa únicamente cuando un usuario visita la página o ejecuta una operación después de transcurridos 20 minutos desde la última actividad. No existe un proceso en segundo plano que resetee el contador exactamente a los 20 minutos en ausencia de tráfico. Si ningún usuario interactúa durante más de 20 minutos y luego uno visita la página, verá `0`, pero el reset no ocurrió hasta ese momento.
+
+---
 ## Solución de problemas
 
 ### Error de conexión a la base de datos al migrar
