@@ -31,11 +31,11 @@ export async function getCounter(): Promise<CounterState> {
 }
 
 /**
- * Incrementa el contador en 1 de forma atómica.
- * Evalúa el reset antes de aplicar el incremento.
+ * Mutate counter value de forma atómica.
+ * Evalúa el reset antes de aplicar la operación.
  * Transacción atómica para evitar race conditions.
  */
-export async function incrementCounter(): Promise<ActionResult> {
+async function mutateCounter(operation: 'increment' | 'decrement'): Promise<ActionResult> {
   try {
      const result = await prisma.$transaction(async (tx) => {
        const current = await tx.$queryRaw<Array<{ key: string; value: number; updated_at: Date }>>`
@@ -46,10 +46,11 @@ export async function incrementCounter(): Promise<ActionResult> {
 
        const counter = current[0]
        const baseValue = shouldReset(counter.updated_at) ? 0 : counter.value
+       const newValue = operation === 'increment' ? baseValue + 1 : baseValue - 1
 
        return tx.counter.update({
          where: { key: COUNTER_KEY },
-         data: { value: baseValue + 1 },
+         data: { value: newValue },
        })
      })
 
@@ -61,31 +62,19 @@ export async function incrementCounter(): Promise<ActionResult> {
 }
 
 /**
+ * Incrementa el contador en 1 de forma atómica.
+ * Evalúa el reset antes de aplicar el incremento.
+ * Transacción atómica para evitar race conditions.
+ */
+export async function incrementCounter(): Promise<ActionResult> {
+  return mutateCounter('increment')
+}
+
+/**
  * Decrementa el contador en 1 de forma atómica.
  * Evalúa el reset antes de aplicar el decremento.
  * Transacción atómica para evitar race conditions.
  */
 export async function decrementCounter(): Promise<ActionResult> {
-  try {
-     const result = await prisma.$transaction(async (tx) => {
-       const current = await tx.$queryRaw<Array<{ key: string; value: number; updated_at: Date }>>`
-         SELECT key, value, updated_at FROM counter WHERE key = ${COUNTER_KEY} FOR UPDATE
-       `
-
-       if (current.length === 0) throw new Error('Contador no encontrado')
-
-       const counter = current[0]
-       const baseValue = shouldReset(counter.updated_at) ? 0 : counter.value
-
-       return tx.counter.update({
-         where: { key: COUNTER_KEY },
-         data: { value: baseValue - 1 },
-       })
-     })
-
-    revalidatePath('/')
-    return { success: true, counter: { value: result.value, updatedAt: result.updated_at } }
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' }
-  }
+  return mutateCounter('decrement')
 }

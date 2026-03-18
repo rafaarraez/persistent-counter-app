@@ -154,12 +154,12 @@ La página usa `force-dynamic` para evitar que Next.js intente pre-renderizar la
 Se usa `sonner` (integrado en Shadcn UI) para mostrar toasts de error cuando las Server Actions fallan. El componente `<Toaster />` está registrado en el layout raíz para disponibilidad global en toda la aplicación.
 
 ### Indicador de reset en tiempo de servidor
-La función `getResetStatus()` en `CounterCard` calcula cuántos minutos y segundos quedan antes del reset automático, calculado en el servidor en el momento del render a partir del `updated_at` devuelto por la DB. Este valor es estático por render y no se actualiza en tiempo real en el cliente (requeriría un Client Component con `setInterval`).
+La función `getResetStatus()` en `CounterCard` calcula a que hora se aplicara el reset automático, calculado en el servidor en el momento del render a partir del `updated_at` devuelto por la DB.
 
 ### Reset automático por evaluación de timestamp
 El reset a cero tras 20 minutos de inactividad no requiere cron jobs ni workers. En cada lectura (`getCounter`) y en cada mutación (`incrementCounter`, `decrementCounter`), se evalúa el campo `updated_at` de la fila del contador: si el tiempo transcurrido supera los 20 minutos, el reset se aplica dentro de la misma operación antes de retornar el valor. Esto garantiza consistencia global sin infraestructura adicional.
 
-### Supabase como backend de base de datos
+### Supabase como base de datos
 Supabase ofrece integración nativa con Prisma mediante cadenas de conexión estándar de PostgreSQL y dispone de un tier gratuito suficiente para el scope del proyecto.
 
 ---
