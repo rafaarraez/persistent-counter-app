@@ -12,6 +12,7 @@ Puedes visitar la app disponible en Vercel en: [https://persistent-counter-app.v
 - pnpm 9.x (recomendado) o npm/yarn
 - Cuenta de Supabase (tier gratuito suficiente para este proyecto)
 
+**Nota**: El proyecto usa `pnpm` como gestor de paquetes, pero puedes usar `npm` o `yarn` si lo prefieres.
 ---
 
 ## Stack tecnológico
@@ -25,18 +26,6 @@ Puedes visitar la app disponible en Vercel en: [https://persistent-counter-app.v
 | UI                | Shadcn UI + Sonner                 |
 | Paradigma backend | Server Actions + Server Components |
 
----
-
-## Variables de entorno
-
-Crea un archivo `.env` en la raíz del proyecto con las siguientes variables:
-
-```env
-NODE_ENV=development o production
-DATABASE_URL="postgresql://..."
-```
-
-**Nota:** La cadena de conexión debe incluir el parámetro `pooling=false` para evitar problemas con migraciones en entornos de producción.
 
 ---
 
@@ -61,6 +50,8 @@ cp .env.example .env
 ```
 
 Edita `.env` y configura `DATABASE_URL` con tu cadena de conexión de Supabase (usa la conexión directa, puerto `5432`, no el pooler de PgBouncer en puerto `6543`).
+
+**Nota:** La cadena de conexión debe incluir el parámetro `pooling=false` para evitar problemas con migraciones en entornos de producción.
 
 ### 3. Aplicar migraciones
 
@@ -124,6 +115,7 @@ src/
   lib/
     prisma.ts           → Singleton de PrismaClient con PrismaPg adapter
     utils.ts            → Utilidades compartidas (cn)
+    counter-utils.ts    → Lógica de negocio: shouldReset y variables
   types/
     counter.ts          → Tipos TypeScript: CounterState, ActionResult
 ```
