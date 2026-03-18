@@ -33,15 +33,7 @@ Puedes visitar la app disponible en Vercel en: [https://persistent-counter-app.v
 
 Sigue estos pasos en orden después de clonar el repositorio:
 
-### 1. Instalar dependencias
-
-```bash
-pnpm install
-```
-
-> Esto también ejecuta `prisma generate` automáticamente gracias al script `postinstall`.
-
-### 2. Configurar variables de entorno
+### 1. Configurar variables de entorno
 
 Copia el archivo de ejemplo y configura tus credenciales:
 
@@ -52,6 +44,15 @@ cp .env.example .env
 Edita `.env` y configura `DATABASE_URL` con tu cadena de conexión de Supabase (usa la conexión directa, puerto `5432`, no el pooler de PgBouncer en puerto `6543`).
 
 **Nota:** La cadena de conexión debe incluir el parámetro `pooling=false` para evitar problemas con migraciones en entornos de producción.
+
+### 2. Instalar dependencias
+
+```bash
+pnpm install
+```
+
+> Esto también ejecuta `prisma generate` automáticamente gracias al script `postinstall`.
+
 
 ### 3. Aplicar migraciones
 
