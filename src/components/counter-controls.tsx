@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useOptimistic, useTransition } from 'react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { incrementCounter, decrementCounter } from '@/actions/counter'
 
@@ -9,48 +10,52 @@ type CounterControlsProps = {
 }
 
 export function CounterControls({ initialValue }: CounterControlsProps) {
-  const [value, setValue] = useState(initialValue)
-  const [error, setError] = useState<string | null>(null)
+  const [optimisticValue, setOptimisticValue] = useOptimistic(initialValue)
   const [isPending, startTransition] = useTransition()
 
   function handleIncrement() {
-    setError(null)
     startTransition(async () => {
+      setOptimisticValue((prev) => prev + 1)
       const result = await incrementCounter()
-      if (result.success) {
-        setValue(result.counter.value)
-      } else {
-        setError(result.error)
+      if (!result.success) {
+        toast.error('Error al incrementar', {
+          description: result.error,
+        })
       }
     })
   }
 
   function handleDecrement() {
-    setError(null)
     startTransition(async () => {
+      setOptimisticValue((prev) => prev - 1)
       const result = await decrementCounter()
-      if (result.success) {
-        setValue(result.counter.value)
-      } else {
-        setError(result.error)
+      if (!result.success) {
+        toast.error('Error al decrementar', {
+          description: result.error,
+        })
       }
     })
   }
 
   return (
-    <div className="flex flex-col items-center gap-6">
-      <div className="text-8xl font-bold tabular-nums transition-all duration-200">
-        {value}
+    <div className="flex flex-col items-center gap-6 w-full">
+      <div
+        className="text-8xl font-bold tabular-nums select-none transition-opacity duration-150"
+        style={{ opacity: isPending ? 0.6 : 1 }}
+        aria-live="polite"
+        aria-label={`Valor del contador: ${optimisticValue}`}
+      >
+        {optimisticValue}
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4" role="group" aria-label="Controles del contador">
         <Button
           variant="outline"
           size="lg"
           onClick={handleDecrement}
           disabled={isPending}
-          aria-label="Decrementar contador"
-          className="w-16 h-16 text-2xl"
+          aria-label="Decrementar contador en 1"
+          className="w-16 h-16 text-2xl font-light"
         >
           −
         </Button>
@@ -59,7 +64,7 @@ export function CounterControls({ initialValue }: CounterControlsProps) {
           size="lg"
           onClick={handleIncrement}
           disabled={isPending}
-          aria-label="Incrementar contador"
+          aria-label="Incrementar contador en 1"
           className="w-16 h-16 text-2xl"
         >
           +
@@ -67,14 +72,8 @@ export function CounterControls({ initialValue }: CounterControlsProps) {
       </div>
 
       {isPending && (
-        <p className="text-sm text-muted-foreground animate-pulse">
-          Guardando...
-        </p>
-      )}
-
-      {error && (
-        <p className="text-sm text-destructive" role="alert">
-          Error: {error}
+        <p className="text-xs text-muted-foreground" aria-live="polite" aria-atomic="true">
+          Sincronizando...
         </p>
       )}
     </div>

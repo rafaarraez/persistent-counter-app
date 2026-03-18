@@ -20,12 +20,12 @@ function CounterCardSkeleton() {
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center gap-8 p-8">
+    <main className="min-h-screen flex flex-col items-center justify-center gap-8 p-4 sm:p-8">
       <div className="text-center space-y-2">
-        <h1 className="text-4xl font-bold tracking-tight">
+        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
           Contador Persistente
         </h1>
-        <p className="text-muted-foreground text-lg">
+        <p className="text-muted-foreground text-base sm:text-lg">
           El valor se mantiene entre sesiones y se reinicia tras 20 minutos de
           inactividad
         </p>
