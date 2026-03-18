@@ -55,7 +55,7 @@ export function CounterControls({ initialValue }: CounterControlsProps) {
           onClick={handleDecrement}
           disabled={isPending}
           aria-label="Decrementar contador en 1"
-          className="w-16 h-16 text-2xl font-light"
+          className="w-16 h-16 text-2xl font-light cursor-pointer"
         >
           −
         </Button>
@@ -65,7 +65,7 @@ export function CounterControls({ initialValue }: CounterControlsProps) {
           onClick={handleIncrement}
           disabled={isPending}
           aria-label="Incrementar contador en 1"
-          className="w-16 h-16 text-2xl"
+          className="w-16 h-16 text-2xl cursor-pointer"
         >
           +
         </Button>
