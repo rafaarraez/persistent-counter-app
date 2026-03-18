@@ -7,7 +7,7 @@ datasource db {
 }
 
 model Counter {
-  id         Int      @id @default(autoincrement())
+  key        String   @id
   value      Int      @default(0)
   updated_at DateTime @default(now()) @updatedAt
 

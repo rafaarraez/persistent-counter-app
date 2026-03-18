@@ -5,8 +5,7 @@ import { prisma } from '@/lib/prisma'
 import type { ActionResult, CounterState } from '@/types/counter'
 
 const RESET_TIMEOUT_MS = 1 * 60 * 1000 // 20 minutos en milisegundos
-const COUNTER_ID = 1
-
+const COUNTER_KEY = "global"
 /**
  * Evalúa si el contador debe resetearse basándose en el timestamp de última actualización.
  * Retorna true si han pasado más de 20 minutos desde updated_at.
@@ -24,12 +23,12 @@ function shouldReset(updatedAt: Date): boolean {
  */
 export async function getCounter(): Promise<CounterState> {
   const counter = await prisma.counter.findUniqueOrThrow({
-    where: { id: COUNTER_ID },
+    where: { key: COUNTER_KEY },
   })
 
   if (shouldReset(counter.updated_at)) {
     const reset = await prisma.counter.update({
-      where: { id: COUNTER_ID },
+      where: { key: COUNTER_KEY },
       data: { value: 0 },
     })
     return { value: reset.value, updatedAt: reset.updated_at }
@@ -46,8 +45,8 @@ export async function getCounter(): Promise<CounterState> {
 export async function incrementCounter(): Promise<ActionResult> {
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const current = await tx.$queryRaw<Array<{ id: number; value: number; updated_at: Date }>>`
-        SELECT id, value, updated_at FROM counter WHERE id = ${COUNTER_ID} FOR UPDATE
+      const current = await tx.$queryRaw<Array<{ key: number; value: number; updated_at: Date }>>`
+        SELECT key, value, updated_at FROM counter WHERE key = ${COUNTER_KEY} FOR UPDATE
       `
 
       if (current.length === 0) throw new Error('Contador no encontrado')
@@ -56,7 +55,7 @@ export async function incrementCounter(): Promise<ActionResult> {
       const baseValue = shouldReset(counter.updated_at) ? 0 : counter.value
 
       return tx.counter.update({
-        where: { id: COUNTER_ID },
+        where: { key: COUNTER_KEY },
         data: { value: baseValue + 1 },
       })
     })
@@ -76,8 +75,8 @@ export async function incrementCounter(): Promise<ActionResult> {
 export async function decrementCounter(): Promise<ActionResult> {
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const current = await tx.$queryRaw<Array<{ id: number; value: number; updated_at: Date }>>`
-        SELECT id, value, updated_at FROM counter WHERE id = ${COUNTER_ID} FOR UPDATE
+      const current = await tx.$queryRaw<Array<{ key: number; value: number; updated_at: Date }>>`
+        SELECT key, value, updated_at FROM counter WHERE key = ${COUNTER_KEY} FOR UPDATE
       `
 
       if (current.length === 0) throw new Error('Contador no encontrado')
@@ -86,7 +85,7 @@ export async function decrementCounter(): Promise<ActionResult> {
       const baseValue = shouldReset(counter.updated_at) ? 0 : counter.value
 
       return tx.counter.update({
-        where: { id: COUNTER_ID },
+        where: { key: COUNTER_KEY },
         data: { value: baseValue - 1 },
       })
     })

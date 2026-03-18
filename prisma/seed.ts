@@ -8,21 +8,20 @@ const prisma = new PrismaClient({
   log: ['error', 'warn'],
 })
 
+const COUNTER_KEY = "global"
+
 async function main() {
-  const existing = await prisma.counter.findFirst()
+  await prisma.counter.upsert({
+    where: { key: COUNTER_KEY },
+    update: {}, // no cambia nada si ya existe
+    create: {
+      key: COUNTER_KEY,
+      value: 0,
+    },
+  })
 
-  if (!existing) {
-    await prisma.counter.create({
-      data: {
-        value: 0,
-      },
-    })
-    console.log('✅ Registro inicial del contador creado (value: 0)')
-  } else {
-    console.log('ℹ️ El contador ya existe (value:', existing.value, ')')
-  }
+  console.log("✅ Counter inicializado correctamente")
 }
-
 main()
   .catch((e) => {
     console.error(e)
