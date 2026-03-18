@@ -2,17 +2,10 @@
 
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
+import { shouldReset } from '@/lib/counter-utils'
 import type { ActionResult, CounterState } from '@/types/counter'
 
-const RESET_TIMEOUT_MS = 1 * 60 * 1000 // 20 minutos en milisegundos
 const COUNTER_KEY = "global"
-/**
- * Evalúa si el contador debe resetearse basándose en el timestamp de última actualización.
- * Retorna true si han pasado más de 20 minutos desde updated_at.
- */
-function shouldReset(updatedAt: Date): boolean {
-  return Date.now() - updatedAt.getTime() > RESET_TIMEOUT_MS
-}
 
 /**
  * Lee el valor actual del contador desde la base de datos.
@@ -44,21 +37,21 @@ export async function getCounter(): Promise<CounterState> {
  */
 export async function incrementCounter(): Promise<ActionResult> {
   try {
-    const result = await prisma.$transaction(async (tx) => {
-      const current = await tx.$queryRaw<Array<{ key: number; value: number; updated_at: Date }>>`
-        SELECT key, value, updated_at FROM counter WHERE key = ${COUNTER_KEY} FOR UPDATE
-      `
+     const result = await prisma.$transaction(async (tx) => {
+       const current = await tx.$queryRaw<Array<{ key: string; value: number; updated_at: Date }>>`
+         SELECT key, value, updated_at FROM counter WHERE key = ${COUNTER_KEY} FOR UPDATE
+       `
 
-      if (current.length === 0) throw new Error('Contador no encontrado')
+       if (current.length === 0) throw new Error('Contador no encontrado')
 
-      const counter = current[0]
-      const baseValue = shouldReset(counter.updated_at) ? 0 : counter.value
+       const counter = current[0]
+       const baseValue = shouldReset(counter.updated_at) ? 0 : counter.value
 
-      return tx.counter.update({
-        where: { key: COUNTER_KEY },
-        data: { value: baseValue + 1 },
-      })
-    })
+       return tx.counter.update({
+         where: { key: COUNTER_KEY },
+         data: { value: baseValue + 1 },
+       })
+     })
 
     revalidatePath('/')
     return { success: true, counter: { value: result.value, updatedAt: result.updated_at } }
@@ -74,21 +67,21 @@ export async function incrementCounter(): Promise<ActionResult> {
  */
 export async function decrementCounter(): Promise<ActionResult> {
   try {
-    const result = await prisma.$transaction(async (tx) => {
-      const current = await tx.$queryRaw<Array<{ key: number; value: number; updated_at: Date }>>`
-        SELECT key, value, updated_at FROM counter WHERE key = ${COUNTER_KEY} FOR UPDATE
-      `
+     const result = await prisma.$transaction(async (tx) => {
+       const current = await tx.$queryRaw<Array<{ key: string; value: number; updated_at: Date }>>`
+         SELECT key, value, updated_at FROM counter WHERE key = ${COUNTER_KEY} FOR UPDATE
+       `
 
-      if (current.length === 0) throw new Error('Contador no encontrado')
+       if (current.length === 0) throw new Error('Contador no encontrado')
 
-      const counter = current[0]
-      const baseValue = shouldReset(counter.updated_at) ? 0 : counter.value
+       const counter = current[0]
+       const baseValue = shouldReset(counter.updated_at) ? 0 : counter.value
 
-      return tx.counter.update({
-        where: { key: COUNTER_KEY },
-        data: { value: baseValue - 1 },
-      })
-    })
+       return tx.counter.update({
+         where: { key: COUNTER_KEY },
+         data: { value: baseValue - 1 },
+       })
+     })
 
     revalidatePath('/')
     return { success: true, counter: { value: result.value, updatedAt: result.updated_at } }

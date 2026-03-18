@@ -1,15 +1,16 @@
 import { getCounter } from '@/actions/counter'
-import { CounterControls } from '@/components/counter-controls'
+import { CounterControls } from '@/components/counter-controls.client'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { RESET_TIMEOUT_MS } from '@/lib/counter-utils'
 
 function getResetStatus(updatedAt: Date): string {
-  const elapsed = Date.now() - updatedAt.getTime()
-  const remaining = 20 * 60 * 1000 - elapsed
-  if (remaining <= 0) return 'Se reiniciará en breve'
-  const minutes = Math.floor(remaining / 60000)
-  const seconds = Math.floor((remaining % 60000) / 1000)
-  if (minutes === 0) return `Se reinicia en ${seconds}s`
-  return `Se reinicia en ${minutes}m ${seconds}s`
+  const resetDate = new Date(updatedAt.getTime() + RESET_TIMEOUT_MS)
+  const formatted = resetDate.toLocaleTimeString(undefined, { // undefined usa la zona horaria local
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  return `Se reinicia a las: ${formatted}`
 }
 
 export async function CounterCard() {
