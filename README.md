@@ -141,7 +141,7 @@ Las operaciones de incremento y decremento se implementan como Server Actions en
 ### Prisma 7 con `@prisma/adapter-pg`
 Prisma 7 introduce una nueva API que requiere configurar un adapter de base de datos explícitamente. Se usa `PrismaPg` de `@prisma/adapter-pg` junto con `Pool` de `pg` como adapter al inicializar el singleton de `PrismaClient` en `src/lib/prisma.ts`. La instancia del cliente se crea una vez y se reutiliza gracias al patrón singleton con `globalThis`, evitando múltiples conexiones en desarrollo con hot reload.
 
-### `SELECT FOR UPDATE` dentro de `$transaction`
+### Concurrencia `SELECT FOR UPDATE` dentro de `$transaction`
 Para garantizar atomicidad real en las operaciones de incremento y decremento, se usa `$queryRaw` con `SELECT ... FOR UPDATE` dentro de `prisma.$transaction()`. Esto obtiene un bloqueo exclusivo de fila (row-level lock) a nivel de PostgreSQL antes de leer y escribir el valor, previniendo race conditions cuando múltiples usuarios actualizan el contador simultáneamente. La segunda transacción concurrente queda bloqueada hasta que la primera libera el lock al hacer commit.
 
 ### `useOptimistic` de React 19
