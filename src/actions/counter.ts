@@ -44,7 +44,6 @@ async function mutateCounter(operation: 'increment' | 'decrement'): Promise<Acti
             url: `${process.env.NEXT_PUBLIC_APP_URL}/api/reset`,
             body: {},
             delay: RESET_TIMEOUT_SECONDS,
-            //deduplicationId: `${COUNTER_KEY}-reset`,
           })
 
           newQStashMessageId = publishResult.messageId
@@ -52,7 +51,6 @@ async function mutateCounter(operation: 'increment' | 'decrement'): Promise<Acti
             messageId: newQStashMessageId,
             url: `${process.env.NEXT_PUBLIC_APP_URL}/api/reset`,
             delay: RESET_TIMEOUT_SECONDS,
-            //deduplicationId: `${COUNTER_KEY}-reset`,
           })
         } catch (publishError) {
           console.error('[QStash] ERROR al publicar job:', publishError)

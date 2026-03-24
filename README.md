@@ -266,7 +266,7 @@ El timeout de reset del contador está hardcodeado en [`src/lib/counter-utils.ts
 
 ---
 
-## ⚡ Auto-Reset con QStash
+## Auto-Reset con QStash
 
 Esta app utiliza **QStash** (una cola de mensajes HTTP de [Upstash](https://upstash.com)) para resetear automáticamente el contador a 0 después de 20 minutos de inactividad. A diferencia del mecanismo de reset reactivo anterior, QStash proporciona un **reset proactivo basado en trabajos (jobs)** que se dispara exactamente a los 20 minutos con entrega garantizada.
 
