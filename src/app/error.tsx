@@ -18,23 +18,23 @@ export default function Error({
   const errorMessage =
     error.message && error.message.length < 200
       ? error.message
-      : 'Something went wrong. Please try again.'
+      : 'Algo salió mal. Por favor, intenta de nuevo.'
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Oops! Something went wrong</CardTitle>
+          <CardTitle>¡Oops! Algo salió mal</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">{errorMessage}</p>
           {error.digest && (
             <p className="text-xs text-muted-foreground/70">
-              Error ID: {error.digest}
+              ID de Error: {error.digest}
             </p>
           )}
           <Button onClick={reset} className="w-full">
-            Try again
+            Intentar de nuevo
           </Button>
         </CardContent>
       </Card>
