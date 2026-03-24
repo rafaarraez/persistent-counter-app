@@ -1,7 +1,7 @@
 import { Receiver } from "@upstash/qstash";
 import { prisma } from "@/lib/prisma";
-
-const COUNTER_KEY = 'global'
+import { COUNTER_KEY } from "@/lib/counter-utils";
+import type { CounterRow } from "@/types/counter";
 
 // Falla en startup si faltan las claves — no en cada request
 const currentSigningKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
@@ -15,13 +15,6 @@ if (!currentSigningKey || !nextSigningKey) {
 
 // Receiver instanciado una sola vez al cargar el módulo
 const receiver = new Receiver({ currentSigningKey, nextSigningKey });
-
-type CounterRow = {
-  key: string;
-  value: number;
-  updated_at: Date;
-  qstash_job_id: string | null;
-};
 
 export async function POST(request: Request) {
   // 1. Verificar firma de QStash
@@ -80,7 +73,6 @@ export async function POST(request: Request) {
     return Response.json(
       {
         error: "Internal server error",
-        details: error instanceof Error ? error.message : String(error),
       },
       { status: 500 }
     );

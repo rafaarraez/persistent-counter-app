@@ -3,10 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { qstash } from '@/lib/qstash'
-import { RESET_TIMEOUT_SECONDS } from '@/lib/counter-utils'
-import type { ActionResult, CounterState } from '@/types/counter'
-
-const COUNTER_KEY = "global"
+import { RESET_TIMEOUT_SECONDS, COUNTER_KEY } from '@/lib/counter-utils'
+import type { ActionResult, CounterState, CounterRow } from '@/types/counter'
 
 /**
  * Lee el valor actual del contador desde la base de datos.
@@ -23,97 +21,94 @@ export async function getCounter(): Promise<CounterState> {
 
 /**
  * Mutate counter value de forma atómica.
- * Transacción atómica para evitar race conditions.
- * Publica un delayed job en QStash tras confirmar la transacción.
- * La lógica de reset es manejada únicamente por QStash a través del webhook en /api/reset.
+ * 
+ * Flow:
+ * 1. Publish QStash job FIRST (get messageId)
+ * 2. Inside transaction: update counter value AND persist messageId atomically
+ * 3. After transaction: cancel old job (best-effort, non-critical)
+ * 
+ * This ensures atomicity: value + job_id are always consistent.
+ * Old job cancellation is best-effort since QStash handles duplicate idempotency.
  */
 async function mutateCounter(operation: 'increment' | 'decrement'): Promise<ActionResult> {
    let previousJobId: string | null = null
+   let newQStashMessageId: string | null = null
    let updatedCounter: { value: number; updated_at: Date } | null = null
 
    try {
-      // Transacción atómica para actualizar el contador
+      // Step 1: Publish new QStash job BEFORE transaction to get messageId
+      console.log('[QStash] Publicando nuevo job...')
+      if (process.env.QSTASH_TOKEN && process.env.NEXT_PUBLIC_APP_URL) {
+        try {
+          const publishResult = await qstash.publishJSON({
+            url: `${process.env.NEXT_PUBLIC_APP_URL}/api/reset`,
+            body: {},
+            delay: RESET_TIMEOUT_SECONDS,
+            //deduplicationId: `${COUNTER_KEY}-reset`,
+          })
+
+          newQStashMessageId = publishResult.messageId
+          console.log('[QStash] Job publicado exitosamente:', {
+            messageId: newQStashMessageId,
+            url: `${process.env.NEXT_PUBLIC_APP_URL}/api/reset`,
+            delay: RESET_TIMEOUT_SECONDS,
+            //deduplicationId: `${COUNTER_KEY}-reset`,
+          })
+        } catch (publishError) {
+          console.error('[QStash] ERROR al publicar job:', publishError)
+          throw publishError
+        }
+      } else {
+        const missingVars = []
+        if (!process.env.QSTASH_TOKEN) missingVars.push('QSTASH_TOKEN')
+        if (!process.env.NEXT_PUBLIC_APP_URL) missingVars.push('NEXT_PUBLIC_APP_URL')
+        console.warn('[QStash] OMITIDO: Variables de entorno faltantes:', missingVars.join(', '))
+      }
+
+      // Step 2: Perform atomic transaction with counter update AND job ID persistence
+      console.log('[QStash] Iniciando transacción atómica...')
       updatedCounter = await prisma.$transaction(async (tx) => {
-        const current = await tx.$queryRaw<Array<{ key: string; value: number; updated_at: Date; qstash_job_id: string | null }>>`
+        const current = await tx.$queryRaw<CounterRow[]>`
           SELECT key, value, updated_at, qstash_job_id FROM counter WHERE key = ${COUNTER_KEY} FOR UPDATE
         `
 
         if (current.length === 0) throw new Error('Contador no encontrado')
 
-         const counter = current[0]
-         previousJobId = counter.qstash_job_id
-         const newValue = operation === 'increment' ? counter.value + 1 : counter.value - 1
+        const counter = current[0]
+        previousJobId = counter.qstash_job_id
+        const newValue = operation === 'increment' ? counter.value + 1 : counter.value - 1
 
-       const updated = await tx.counter.update({
-         where: { key: COUNTER_KEY },
-         data: { value: newValue },
-       })
+        // Update counter value AND job ID atomically
+        const updated = await tx.counter.update({
+          where: { key: COUNTER_KEY },
+          data: { 
+            value: newValue,
+            qstash_job_id: newQStashMessageId,
+          },
+        })
 
-       return { value: updated.value, updated_at: updated.updated_at }
-     })
+        console.log('[QStash] Transacción completada. Job ID persistido:', newQStashMessageId)
 
-      // Procesar QStash fuera de la transacción (después del commit)
-      console.log('[QStash] Iniciando procesamiento post-transacción')
+        return { value: updated.value, updated_at: updated.updated_at }
+      })
 
-      try {
-        // Cancelar el job anterior si existe
-         if (previousJobId) {
-           console.log('[QStash] Cancelando job anterior:', previousJobId)
-           try {
-             await qstash.messages.cancel(previousJobId)
-             console.log('[QStash] Job anterior cancelado exitosamente')
-           } catch (deleteError) {
-             // El job puede ya haber expirado o ejecutado, ignorar silenciosamente
-             console.log('[QStash] No se pudo cancelar job anterior (puede haber expirado):', deleteError)
-           }
-         }
-
-        // Publicar nuevo delayed job con TTL de 20 minutos (1200 segundos)
-        if (process.env.QSTASH_TOKEN && process.env.NEXT_PUBLIC_APP_URL) {
-          console.log('[QStash] Publicando nuevo job a:', `${process.env.NEXT_PUBLIC_APP_URL}/api/reset`)
-
-          const publishResult = await qstash.publishJSON({
-            url: `${process.env.NEXT_PUBLIC_APP_URL}/api/reset`,
-            body: {},
-            delay: RESET_TIMEOUT_SECONDS,
-            deduplicationId: `${COUNTER_KEY}-reset`,
-          })
-
-          console.log('[QStash] Job publicado exitosamente:', {
-            messageId: publishResult.messageId,
-            url: `${process.env.NEXT_PUBLIC_APP_URL}/api/reset`,
-            delay: RESET_TIMEOUT_SECONDS,
-            deduplicationId: `${COUNTER_KEY}-reset`,
-          })
-
-          // Persistir el nuevo job ID
-          await prisma.counter.update({
-            where: { key: COUNTER_KEY },
-            data: { qstash_job_id: publishResult.messageId },
-          })
-          console.log('[QStash] Job ID persistido en base de datos:', publishResult.messageId)
-        } else {
-          const missingVars = []
-          if (!process.env.QSTASH_TOKEN) missingVars.push('QSTASH_TOKEN')
-          if (!process.env.NEXT_PUBLIC_APP_URL) missingVars.push('NEXT_PUBLIC_APP_URL')
-          console.warn('[QStash] OMITIDO: Variables de entorno faltantes:', missingVars.join(', '))
-        }
-      } catch (qstashError) {
-        // Loguear el error pero no fallar la operación del contador
-        console.error('[QStash] ERROR al procesar QStash:', qstashError)
-        if (qstashError instanceof Error) {
-          console.error('[QStash] Error details:', {
-            message: qstashError.message,
-            stack: qstashError.stack,
-            name: qstashError.name,
-          })
+      // Step 3: Cancel old QStash job (best-effort, after transaction confirmed)
+      if (previousJobId) {
+        console.log('[QStash] Cancelando job anterior en background:', previousJobId)
+        try {
+          await qstash.messages.cancel(previousJobId)
+          console.log('[QStash] Job anterior cancelado exitosamente')
+        } catch (cancelError) {
+          // El job puede ya haber expirado o ejecutado, ignorar silenciosamente
+          console.log('[QStash] No se pudo cancelar job anterior (puede haber expirado):', cancelError)
         }
       }
 
-     revalidatePath('/')
-     return { success: true, counter: { value: updatedCounter.value, updatedAt: updatedCounter.updated_at } }
+      revalidatePath('/')
+      return { success: true, counter: { value: updatedCounter.value, updatedAt: updatedCounter.updated_at } }
    } catch (error) {
-     return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' }
+      console.error('[Counter Mutation] Error:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' }
    }
 }
 

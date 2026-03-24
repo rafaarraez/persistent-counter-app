@@ -91,6 +91,64 @@ La aplicación estará disponible en [http://localhost:3000](http://localhost:30
 
 ---
 
+## Variables de Entorno
+
+La aplicación requiere configurar las siguientes variables de entorno en un archivo `.env` en la raíz del proyecto. Puedes usar `.env.example` como referencia de inicio.
+
+### Base de Datos (Prisma)
+
+| Variable | Descripción | Dónde obtenerla | Ejemplo |
+|----------|-------------|-----------------|---------|
+| `DATABASE_URL` | Cadena de conexión PostgreSQL a Supabase con pooling desactivado | Panel de Supabase → Settings → Database → Connection Strings → URI (URI connection string) — **usar puerto 5432**, no 6543 | `postgresql://user:password@db.123456.supabase.co:5432/postgres` |
+
+**Importante**: La cadena de conexión debe incluir **`?pooling=false`** al final para evitar problemas con migraciones en producción:
+```
+postgresql://user:password@db.123456.supabase.co:5432/postgres?pooling=false
+```
+
+### QStash (Reset Automático)
+
+Estas variables habilitan el auto-reset del contador cada 20 minutos de inactividad mediante QStash. Si no están configuradas, el contador funciona normalmente pero sin auto-reset automático.
+
+| Variable | Descripción | Dónde obtenerla | Ejemplo |
+|----------|-------------|-----------------|---------|
+| `QSTASH_TOKEN` | Token de API de tu cuenta Upstash QStash | [Consola de Upstash](https://console.upstash.com) → QStash → Cluster → Credentials | `eyJhbGciOiJIUzI1Ni...` |
+| `QSTASH_CURRENT_SIGNING_KEY` | Clave de firma actual para verificar webhooks | [Consola de Upstash](https://console.upstash.com) → QStash → Cluster → Signing Keys → Current | `sig_...` |
+| `QSTASH_NEXT_SIGNING_KEY` | Clave de firma del siguiente período (para rotación de claves) | [Consola de Upstash](https://console.upstash.com) → QStash → Cluster → Signing Keys → Next | `sig_...` |
+
+### URL de la Aplicación
+
+| Variable | Descripción | Dónde configurarla | Ejemplo (Desarrollo) | Ejemplo (Producción) |
+|----------|-------------|-------|-----------------|-----------------|
+| `NEXT_PUBLIC_APP_URL` | URL pública de tu aplicación, usada por QStash para construir el webhook `/api/reset` | Varía según el entorno | `http://localhost:3000` | `https://tu-app.vercel.app` |
+
+**Nota**: Esta variable es `NEXT_PUBLIC_` porque se expone al navegador en logs del cliente. No contiene secretos.
+
+### Ejemplo de archivo `.env` completo
+
+```bash
+# Desarrollo local
+NODE_ENV=development
+DATABASE_URL="postgresql://user:password@db.123456.supabase.co:5432/postgres?pooling=false"
+QSTASH_TOKEN=eyJhbGciOiJIUzI1Ni...
+QSTASH_CURRENT_SIGNING_KEY=sig_current123...
+QSTASH_NEXT_SIGNING_KEY=sig_next456...
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+### Configuración en Vercel (Producción)
+
+1. Ve a tu proyecto en [Vercel Dashboard](https://vercel.com)
+2. Settings → Environment Variables
+3. Agrega cada variable con sus valores de producción:
+   - `DATABASE_URL`: Cadena de Supabase
+   - `QSTASH_TOKEN`: Token de tu cuenta Upstash
+   - `QSTASH_CURRENT_SIGNING_KEY`: Clave actual de firma
+   - `QSTASH_NEXT_SIGNING_KEY`: Clave siguiente de firma
+   - `NEXT_PUBLIC_APP_URL`: URL publicada de tu app en Vercel (ej: `https://mi-app.vercel.app`)
+
+---
+
 ## Estructura de carpetas
 
 ```
@@ -205,3 +263,37 @@ Asegúrate de haber ejecutado `pnpm prisma db seed` para crear el registro inici
 
 ### Variables de entorno
 El timeout de reset del contador está hardcodeado en [`src/lib/counter-utils.ts`](src/lib/counter-utils.ts) como `RESET_TIMEOUT_MINUTES = 20`. Para cambiarlo, edita ese valor directamente.
+
+---
+
+## ⚡ Auto-Reset con QStash
+
+Esta app utiliza **QStash** (una cola de mensajes HTTP de [Upstash](https://upstash.com)) para resetear automáticamente el contador a 0 después de 20 minutos de inactividad. A diferencia del mecanismo de reset reactivo anterior, QStash proporciona un **reset proactivo basado en trabajos (jobs)** que se dispara exactamente a los 20 minutos con entrega garantizada.
+
+### Cómo funciona (explicación simple)
+
+- **Cada vez que el contador cambia** (incremento o decremento), la app programa un "trabajo de reset" 20 minutos en el futuro usando QStash.
+- **Si el contador cambia nuevamente** antes de que pasen esos 20 minutos, el trabajo anterior se cancela y se programa uno nuevo. El temporizador siempre se reinicia desde la última acción — sin necesidad de programación manual.
+- **Después de 20 minutos de inactividad**, QStash llama al webhook `/api/reset` de la app, que verifica si el trabajo sigue activo y resetea el contador a 0.
+- **Si QStash no está configurado** (por ej., en desarrollo local sin `QSTASH_TOKEN`), el contador funciona normalmente — solo que no se auto-resetea.
+
+### Decisiones técnicas clave
+
+- **Transacciones atómicas**: La actualización del contador, la programación del trabajo en QStash y la persistencia del ID del trabajo suceden en una única transacción de base de datos — sin estados inconsistentes.
+- **Idempotencia**: El `qstash_job_id` almacenado en la BD se compara en cada llamada al webhook para descartar trabajos obsoletos o duplicados
+- **Verificación de firma**: Cada llamada al webhook se verifica usando las claves de firma de QStash — previniendo reseteos no autorizados.
+- **Degradación elegante**: Si `QSTASH_TOKEN` no está configurado (desarrollo local), el contador funciona normalmente — solo sin auto-reset.
+- **Registro estructurado**: Todos los eventos relacionados con QStash emiten registros JSON con campos `timestamp` y `event` para facilitar la depuración y monitoreo.
+
+### Variables de entorno requeridas
+
+Agrega estas a tu archivo `.env` para habilitar la integración con QStash:
+
+```
+QSTASH_TOKEN=                    # Tu token de API de QStash
+QSTASH_CURRENT_SIGNING_KEY=      # Clave de firma actual del webhook
+QSTASH_NEXT_SIGNING_KEY=         # Clave de firma del siguiente webhook (para rotación)
+NEXT_PUBLIC_APP_URL=             # URL de tu app desplegada (usada para construir la URL del webhook)
+```
+
+Consulta [`.env.example`](.env.example) para más detalles de configuración. QStash es opcional — la app funciona sin él, pero el auto-reset de 20 minutos estará deshabilitado.
