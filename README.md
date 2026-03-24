@@ -1,6 +1,6 @@
 # persistent-counter-app
 
-Aplicación web de contador global con persistencia en base de datos construida con **Next.js 15** y **Server Actions**. El contador se incrementa o decrementa de forma atómica y se resetea automáticamente a cero tras 20 minutos de inactividad (en la siguiente lectura o escritura), sin necesidad de procesos en segundo plano ni cron jobs. El estado persiste en **Supabase (PostgreSQL)** mediante **Prisma 7**.
+Aplicación web de contador global con persistencia en base de datos construida con **Next.js 15** y **Server Actions**. El contador se incrementa o decrementa de forma atómica y se resetea automáticamente a cero tras 20 minutos gracias a un sistema de eventos basados en jobs de **QStash**. El estado persiste en **Supabase (PostgreSQL)** mediante **Prisma 7**.
 
 Puedes visitar la app disponible en Vercel en: [https://persistent-counter-app.vercel.app/](https://persistent-counter-app.vercel.app/).
 
@@ -205,10 +205,7 @@ La página usa `force-dynamic` para evitar que Next.js intente pre-renderizar la
 Se usa `sonner` (integrado en Shadcn UI) para mostrar toasts de error cuando las Server Actions fallan. El componente `<Toaster />` está registrado en el layout raíz para disponibilidad global en toda la aplicación.
 
 ### Indicador de reset en tiempo de servidor
-La función `getResetStatus()` en `CounterCard` calcula a que hora se aplicara el reset automático, calculado en el servidor en el momento del render a partir del `updated_at` devuelto por la DB.
-
-### Reset automático por evaluación de timestamp
-El reset a cero tras 20 minutos de inactividad no requiere cron jobs ni workers. En cada lectura (`getCounter`) y en cada mutación (`incrementCounter`, `decrementCounter`), se evalúa el campo `updated_at` de la fila del contador: si el tiempo transcurrido supera los 20 minutos, el reset se aplica dentro de la misma operación antes de retornar el valor. Esto garantiza consistencia global sin infraestructura adicional.
+Se creo un Client Component para mostrar el tiempo de reset en el UI, pero el cálculo del tiempo absoluto se realiza en el servidor para evitar drift en el cliente.
 
 ### Supabase como base de datos
 Supabase ofrece integración nativa con Prisma mediante cadenas de conexión estándar de PostgreSQL y dispone de un tier gratuito suficiente para el scope del proyecto.
@@ -249,9 +246,6 @@ flowchart TD
 ### Indicador de reset no es tiempo real en el cliente
 `getResetStatus(updatedAt)` en `CounterCard` calcula la hora absoluta del próximo reset en el servidor, en el momento del render. Este valor es estático: no cuenta regresivamente en tiempo real. Para tiempo real se requeriría un Client Component con `setInterval` que recibiera `updatedAt` como prop serializable.
 
-### El reset automático es reactivo, no proactivo
-El reset a cero se activa únicamente cuando un usuario visita la página o ejecuta una operación después de transcurridos 20 minutos desde la última actividad. No existe un proceso en segundo plano que resetee el contador exactamente a los 20 minutos en ausencia de tráfico. Si ningún usuario interactúa durante más de 20 minutos y luego uno visita la página, verá `0`, pero el reset no ocurrió hasta ese momento.
-
 ---
 ## Solución de problemas
 
@@ -265,6 +259,8 @@ Asegúrate de haber ejecutado `pnpm prisma db seed` para crear el registro inici
 El timeout de reset del contador está hardcodeado en [`src/lib/counter-utils.ts`](src/lib/counter-utils.ts) como `RESET_TIMEOUT_MINUTES = 20`. Para cambiarlo, edita ese valor directamente.
 
 ---
+
+# Actualizacion del sistema
 
 ## Auto-Reset con QStash
 

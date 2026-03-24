@@ -20,15 +20,15 @@ export async function getCounter(): Promise<CounterState> {
 }
 
 /**
- * Mutate counter value de forma atómica.
+ * Actualizar el valor del contador de forma atómica.
  * 
- * Flow:
- * 1. Publish QStash job FIRST (get messageId)
- * 2. Inside transaction: update counter value AND persist messageId atomically
- * 3. After transaction: cancel old job (best-effort, non-critical)
+ * Flujo:
+ * 1. Publicar PRIMERO el trabajo de QStash (obtener messageId)
+ * 2. Dentro de la transacción: actualizar el valor del contador Y persistir el messageId de forma atómica
+ * 3. Después de la transacción: cancelar el trabajo anterior (en la medida de lo posible, no crítico)
  * 
- * This ensures atomicity: value + job_id are always consistent.
- * Old job cancellation is best-effort since QStash handles duplicate idempotency.
+ * Esto garantiza la atomicidad: el valor y el job_id son siempre consistentes.
+ * La cancelación del trabajo anterior se realiza en la medida de lo posible, ya que QStash gestiona la idempotencia de duplicados.
  */
 async function mutateCounter(operation: 'increment' | 'decrement'): Promise<ActionResult> {
    let previousJobId: string | null = null
@@ -36,7 +36,7 @@ async function mutateCounter(operation: 'increment' | 'decrement'): Promise<Acti
    let updatedCounter: { value: number; updated_at: Date } | null = null
 
    try {
-      // Step 1: Publish new QStash job BEFORE transaction to get messageId
+      // Paso 1: Publica un nuevo trabajo de QStash ANTES de la transacción para obtener el messageId
       console.log('[QStash] Publicando nuevo job...')
       if (process.env.QSTASH_TOKEN && process.env.NEXT_PUBLIC_APP_URL) {
         try {
@@ -63,7 +63,7 @@ async function mutateCounter(operation: 'increment' | 'decrement'): Promise<Acti
         console.warn('[QStash] OMITIDO: Variables de entorno faltantes:', missingVars.join(', '))
       }
 
-      // Step 2: Perform atomic transaction with counter update AND job ID persistence
+      // Paso 2: Realizar una transacción atómica con actualización del contador Y persistencia del ID del trabajo
       console.log('[QStash] Iniciando transacción atómica...')
       updatedCounter = await prisma.$transaction(async (tx) => {
         const current = await tx.$queryRaw<CounterRow[]>`
@@ -76,7 +76,7 @@ async function mutateCounter(operation: 'increment' | 'decrement'): Promise<Acti
         previousJobId = counter.qstash_job_id
         const newValue = operation === 'increment' ? counter.value + 1 : counter.value - 1
 
-        // Update counter value AND job ID atomically
+        // Actualizar el valor del contador Y el ID del trabajo de forma atómica
         const updated = await tx.counter.update({
           where: { key: COUNTER_KEY },
           data: { 
@@ -90,7 +90,7 @@ async function mutateCounter(operation: 'increment' | 'decrement'): Promise<Acti
         return { value: updated.value, updated_at: updated.updated_at }
       })
 
-      // Step 3: Cancel old QStash job (best-effort, after transaction confirmed)
+      // Paso 3: Cancelar el trabajo antiguo de QStash (se hará todo lo posible, una vez confirmada la transacción)
       if (previousJobId) {
         console.log('[QStash] Cancelando job anterior en background:', previousJobId)
         try {
